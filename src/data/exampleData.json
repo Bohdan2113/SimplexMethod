@@ -1,0 +1,27 @@
+{
+  "resursCount": 5,
+  "productsCount": 2,
+  "resources": [
+    {
+      "requirements": [1, 0],
+      "available": 50
+    },
+    {
+      "requirements": [0, 1],
+      "available": 80
+    },
+    {
+      "requirements": [3, -2],
+      "available": 90
+    },
+    {
+      "requirements": [4, 1],
+      "available": 240
+    },
+    {
+      "requirements": [-3, 1],
+      "available": 0
+    }
+  ],
+  "prices": [2, 7]
+}
