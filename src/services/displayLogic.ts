@@ -16,21 +16,21 @@ export let currentData: LPData = {
 
 export class InteractiveTableManager {
   private dataService: DataService;
+
   private loadButton!: HTMLButtonElement;
   private statusElement!: HTMLElement;
-  private tableContainer!: HTMLElement;
-  private dataTable!: HTMLTableElement;
-  private addRowButton!: HTMLButtonElement;
-  private removeRowButton!: HTMLButtonElement;
-  private addColumnButton!: HTMLButtonElement;
-  private removeColumnButton!: HTMLButtonElement;
+  private numVariablesInput!: HTMLInputElement;
+  private numRestrictionsInput!: HTMLInputElement;
+  private restrictionsContainer!: HTMLElement;
+  private objectiveFunctionContainer!: HTMLElement;
   private objectiveFunctionElement!: HTMLElement;
+  private nonNegativityConstraint!: HTMLElement;
 
   constructor() {
     this.dataService = DataService.getInstance();
     this.initializeElements();
     this.setupEventListeners();
-    this.createInitialTable();
+    this.createInitialForm();
   }
 
   private initializeElements(): void {
@@ -38,41 +38,125 @@ export class InteractiveTableManager {
       "loadDataBtn"
     ) as HTMLButtonElement;
     this.statusElement = document.getElementById("status") as HTMLElement;
-    this.tableContainer = document.getElementById(
-      "tableContainer"
+    this.numVariablesInput = document.getElementById(
+      "numVariables"
+    ) as HTMLInputElement;
+    this.numRestrictionsInput = document.getElementById(
+      "numRestrictions"
+    ) as HTMLInputElement;
+    this.restrictionsContainer = document.getElementById(
+      "restrictionsContainer"
     ) as HTMLElement;
-    this.dataTable = document.getElementById("dataTable") as HTMLTableElement;
-    this.addRowButton = document.getElementById(
-      "addRowBtn"
-    ) as HTMLButtonElement;
-    this.removeRowButton = document.getElementById(
-      "removeRowBtn"
-    ) as HTMLButtonElement;
-    this.addColumnButton = document.getElementById(
-      "addColumnBtn"
-    ) as HTMLButtonElement;
-    this.removeColumnButton = document.getElementById(
-      "removeColumnBtn"
-    ) as HTMLButtonElement;
+    this.objectiveFunctionContainer = document.getElementById(
+      "objectiveFunctionContainer"
+    ) as HTMLElement;
     this.objectiveFunctionElement = document.getElementById(
       "objectiveFunction"
+    ) as HTMLElement;
+    this.nonNegativityConstraint = document.getElementById(
+      "nonNegativityConstraint"
     ) as HTMLElement;
   }
 
   private setupEventListeners(): void {
     this.loadButton.addEventListener("click", () => this.loadAndDisplayData());
-    this.addRowButton.addEventListener("click", () => this.addRow());
-    this.removeRowButton.addEventListener("click", () => this.removeRow());
-    this.addColumnButton.addEventListener("click", () => this.addColumn());
-    this.removeColumnButton.addEventListener("click", () =>
-      this.removeColumn()
+    this.numVariablesInput.addEventListener("input", () =>
+      this.onVariablesCountChange()
+    );
+    this.numRestrictionsInput.addEventListener("input", () =>
+      this.onRestrictionsCountChange()
     );
   }
 
-  private createInitialTable(): void {
-    this.displayTable(currentData);
-    this.updateButtonStates();
+  private createInitialForm(): void {
+    this.syncControlsWithData();
+    this.renderForm(currentData);
     this.updateObjectiveFunction();
+  }
+
+  private syncControlsWithData(): void {
+    this.numVariablesInput.value = currentData.productsCount.toString();
+    this.numRestrictionsInput.value = currentData.resursCount.toString();
+  }
+
+  private onVariablesCountChange(): void {
+    const newCount = parseInt(this.numVariablesInput.value) || 1;
+    if (newCount < 1 || newCount > 10) {
+      this.showStatus("Number of variables must be between 1 and 10", "error");
+      this.numVariablesInput.value = currentData.productsCount.toString();
+      return;
+    }
+
+    this.updateDataStructure(newCount, currentData.resursCount);
+    this.renderForm(currentData);
+    this.updateObjectiveFunction();
+    this.showStatus(`Updated to ${newCount} variables`, "success");
+  }
+
+  private onRestrictionsCountChange(): void {
+    const newCount = parseInt(this.numRestrictionsInput.value) || 1;
+    if (newCount < 1 || newCount > 10) {
+      this.showStatus(
+        "Number of restrictions must be between 1 and 10",
+        "error"
+      );
+      this.numRestrictionsInput.value = currentData.resursCount.toString();
+      return;
+    }
+
+    this.updateDataStructure(currentData.productsCount, newCount);
+    this.renderForm(currentData);
+    this.updateObjectiveFunction();
+    this.showStatus(`Updated to ${newCount} restrictions`, "success");
+  }
+
+  private updateDataStructure(
+    newVariablesCount: number,
+    newRestrictionsCount: number
+  ): void {
+    currentData.productsCount = newVariablesCount;
+
+    if (newVariablesCount > currentData.prices.length) {
+      for (let i = currentData.prices.length; i < newVariablesCount; i++) {
+        currentData.prices.push(0);
+      }
+    } else if (newVariablesCount < currentData.prices.length) {
+      currentData.prices = currentData.prices.slice(0, newVariablesCount);
+    }
+
+    currentData.resursCount = newRestrictionsCount;
+
+    if (newRestrictionsCount > currentData.resources.length) {
+      for (
+        let i = currentData.resources.length;
+        i < newRestrictionsCount;
+        i++
+      ) {
+        const newResource = {
+          requirements: new Array(newVariablesCount).fill(0),
+          available: 0,
+        };
+        currentData.resources.push(newResource);
+      }
+    } else if (newRestrictionsCount < currentData.resources.length) {
+      currentData.resources = currentData.resources.slice(
+        0,
+        newRestrictionsCount
+      );
+    }
+
+    currentData.resources.forEach((resource) => {
+      if (resource.requirements.length < newVariablesCount) {
+        for (let i = resource.requirements.length; i < newVariablesCount; i++) {
+          resource.requirements.push(0);
+        }
+      } else if (resource.requirements.length > newVariablesCount) {
+        resource.requirements = resource.requirements.slice(
+          0,
+          newVariablesCount
+        );
+      }
+    });
   }
 
   private async loadAndDisplayData(): Promise<void> {
@@ -80,24 +164,24 @@ export class InteractiveTableManager {
       this.setLoadingState(true);
       this.showStatus("Loading data...", "loading");
 
-      // Завантаження даних з data.json
-      const data: LPData = await this.dataService.loadData(DATA_FILE_PATH as string);
-
+      const data: LPData = await this.dataService.loadData(
+        DATA_FILE_PATH || "../data/Bogdan.json"
+      );
       const validationResult: DataValidationResult =
         this.dataService.validateData(data);
+
       if (!validationResult.isValid) {
-        this.showStatus("Data is invalid", "error");
+        this.showStatus("Data from file is invalid", "error");
         this.displayValidationErrors(validationResult.errors);
         return;
       }
 
       currentData = data;
-      this.displayTable(data);
-      this.updateButtonStates();
+      this.syncControlsWithData();
+      this.renderForm(currentData);
       this.updateObjectiveFunction();
       this.showStatus("Data loaded successfully!", "success");
     } catch (error) {
-      console.error("Error loading data:", error);
       this.showStatus(
         `Error loading data: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -109,133 +193,32 @@ export class InteractiveTableManager {
     }
   }
 
-  private addRow(): void {
-    if (currentData.resursCount >= 10) {
-      this.showStatus("Maximum 10 resources allowed", "error");
-      return;
-    }
-
-    currentData.resursCount++;
-    currentData.resources.push({
-      requirements: new Array(currentData.productsCount).fill(0),
-      available: 0,
-    });
-
-    this.displayTable(currentData);
-    this.updateButtonStates();
-    this.updateObjectiveFunction();
-    this.showStatus("Resource added", "success");
-  }
-
-  private removeRow(): void {
-    if (currentData.resursCount <= 1) {
-      this.showStatus("Minimum 1 resource required", "error");
-      return;
-    }
-
-    currentData.resursCount--;
-    currentData.resources.pop();
-
-    this.displayTable(currentData);
-    this.updateButtonStates();
-    this.updateObjectiveFunction();
-    this.showStatus("Resource removed", "success");
-  }
-
-  private addColumn(): void {
-    if (currentData.productsCount >= 10) {
-      this.showStatus("Maximum 10 products allowed", "error");
-      return;
-    }
-
-    currentData.productsCount++;
-    currentData.prices.push(0);
-
-    // Додаємо новий стовпець до всіх ресурсів
-    currentData.resources.forEach((resource) => {
-      resource.requirements.push(0);
-    });
-
-    this.displayTable(currentData);
-    this.updateButtonStates();
-    this.updateObjectiveFunction();
-    this.showStatus("Product added", "success");
-  }
-
-  private removeColumn(): void {
-    if (currentData.productsCount <= 1) {
-      this.showStatus("Minimum 1 product required", "error");
-      return;
-    }
-
-    currentData.productsCount--;
-    currentData.prices.pop();
-
-    // Видаляємо останній стовпець з усіх ресурсів
-    currentData.resources.forEach((resource) => {
-      resource.requirements.pop();
-    });
-
-    this.displayTable(currentData);
-    this.updateButtonStates();
-    this.updateObjectiveFunction();
-    this.showStatus("Product removed", "success");
-  }
-
-  private updateButtonStates(): void {
-    this.removeRowButton.disabled = currentData.resursCount <= 1;
-    this.addRowButton.disabled = currentData.resursCount >= 10;
-    this.removeColumnButton.disabled = currentData.productsCount <= 1;
-    this.addColumnButton.disabled = currentData.productsCount >= 10;
-  }
-
   private updateObjectiveFunction(): void {
-    const isValid = this.isDataValid();
-
-    if (!isValid) {
-      this.objectiveFunctionElement.textContent = "Q(x₁,x₂,...) = ?";
+    if (!this.isDataValid()) {
+      this.objectiveFunctionElement.textContent = "Q(...) = ?";
       this.objectiveFunctionElement.className = "objective-function invalid";
       return;
     }
-
-    // Створюємо цільову функцію
-    const terms: string[] = [];
-    const vars: string[] = [];
-
-    for (let i = 0; i < currentData.productsCount; i++) {
-      const price = currentData.prices[i];
-      if (price > 0) {
+    const terms: string[] = [],
+      vars: string[] = [];
+    currentData.prices.forEach((price, i) => {
+      if (price !== 0) {
         vars.push(`x${subscripts[i + 1]}`);
         terms.push(`${price}x${subscripts[i + 1]}`);
       }
-    }
-
-    if (terms.length === 0) {
-      this.objectiveFunctionElement.textContent = "Q(..) = 0";
-    } else {
-      this.objectiveFunctionElement.textContent = `Q(${vars.join(
-        ","
-      )}) = ${terms.join("+")} → max`;
-    }
-
+    });
+    this.objectiveFunctionElement.textContent =
+      terms.length === 0
+        ? "Q(...) = 0 → max"
+        : `Q(${vars.join(",")}) = ${terms.join(" + ")} → max`;
     this.objectiveFunctionElement.className = "objective-function valid";
+    this.nonNegativityConstraint.innerHTML = `X<sub>i</sub> &ge; 0, where i = 1,...,${currentData.productsCount}`;
   }
 
   private isDataValid(): boolean {
-    // Перевіряємо чи всі ціни є дійсними числами
-    for (const price of currentData.prices) {
-      if (isNaN(price) || price < 0) {
-        return false;
-      }
-    }
-
-    // Перевіряємо чи всі ресурси мають дійсні значення
-    for (const resource of currentData.resources) {
-      if (isNaN(resource.available) || resource.available < 0) {
-        return false;
-      }
-    }
-
+    for (const p of currentData.prices) if (isNaN(p)) return false;
+    for (const r of currentData.resources)
+      if (isNaN(r.available) || r.available < 0) return false;
     return true;
   }
 
@@ -255,135 +238,112 @@ export class InteractiveTableManager {
   }
 
   private displayValidationErrors(errors: ValidationError[]): void {
-    this.statusElement.innerHTML +=
-      "<br><br>" + errors.map((e) => e.message).join("<br>");
+    this.statusElement.innerHTML =
+      "Validation Errors:<br>" + errors.map((e) => e.message).join("<br>");
   }
 
-  private displayTable(data: LPData): void {
-    // Очищення попереднього вмісту
-    this.dataTable.innerHTML = "";
+  private renderForm(data: LPData): void {
+    this.restrictionsContainer.innerHTML = "";
+    this.objectiveFunctionContainer.innerHTML = "";
 
-    // Створення заголовка таблиці (thead)
-    const thead = this.dataTable.createTHead();
-    const headerRow = thead.insertRow();
+    data.resources.forEach((resource, i) => {
+      const row = document.createElement("div");
+      row.className = "equation-row";
 
-    // Перший стовпець заголовка
-    const thResource = document.createElement("th");
-    thResource.textContent = "Resources";
-    headerRow.appendChild(thResource);
+      const label = document.createElement("span");
+      label.className = "row-label";
+      label.textContent = `${i + 1})`;
+      row.appendChild(label);
 
-    // Стовпці для продуктів
-    for (let i = 0; i < data.productsCount; i++) {
-      const th = document.createElement("th");
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = `Product ${i + 1}`;
-      input.className = "editable-cell product-name";
-      input.addEventListener("blur", (e) => {
-        // Тут можна додати логіку для збереження нової назви продукту
-        console.log(
-          `Product ${i + 1} renamed to: ${(e.target as HTMLInputElement).value}`
-        );
-      });
-      th.appendChild(input);
-      headerRow.appendChild(th);
-    }
-
-    // Останній стовпець заголовка
-    const thAvailable = document.createElement("th");
-    thAvailable.textContent = "Total available resources";
-    thAvailable.className = "available-column";
-    headerRow.appendChild(thAvailable);
-
-    // Створення тіла таблиці (tbody)
-    const tbody = this.dataTable.createTBody();
-
-    // Рядки для кожного ресурсу
-    data.resources.forEach((resource, index) => {
-      const row = tbody.insertRow();
-
-      // Назва ресурсу (редагується)
-      const resourceNameCell = row.insertCell();
-      const resourceNameInput = document.createElement("input");
-      resourceNameInput.type = "text";
-      resourceNameInput.value = `Resource ${index + 1}`;
-      resourceNameInput.className = "editable-cell resource-name";
-      resourceNameInput.addEventListener("blur", (e) => {
-        console.log(
-          `Resource ${index + 1} renamed to: ${
-            (e.target as HTMLInputElement).value
-          }`
-        );
-      });
-      resourceNameCell.appendChild(resourceNameInput);
-
-      // Вимоги ресурсів (редагуються)
-      resource.requirements.forEach((value, productIndex) => {
-        const cell = row.insertCell();
-        const input = document.createElement("input");
-        input.type = "number";
-        input.value = value.toString();
-        input.className = "editable-cell";
-        // input.min = "0";
-        input.addEventListener("input", (e) => {
-          const newValue =
-            parseFloat((e.target as HTMLInputElement).value) || 0;
-          currentData.resources[index].requirements[productIndex] = newValue;
-          this.updateObjectiveFunction();
+      for (let j = 0; j < data.productsCount; j++) {
+        const input = this.createInput(resource.requirements[j], (val) => {
+          currentData.resources[i].requirements[j] = val;
         });
-        cell.appendChild(input);
-      });
+        row.appendChild(input);
 
-      // Доступні ресурси (редагуються)
-      const availableCell = row.insertCell();
-      const availableInput = document.createElement("input");
-      availableInput.type = "number";
-      availableInput.value = resource.available.toString();
-      availableInput.className = "editable-cell available-column";
-      availableInput.min = "0";
-      availableInput.addEventListener("input", (e) => {
-        let newValue = parseFloat((e.target as HTMLInputElement).value) || 0;
-        if (newValue < 0) {
-          newValue = 0;
-          availableInput.value = newValue.toString();
+        const xSpan = document.createElement("span");
+        xSpan.innerHTML = `&bull;X<sub>${j + 1}</sub>`;
+        row.appendChild(xSpan);
+
+        if (j < data.productsCount - 1) {
+          const plusSpan = document.createElement("span");
+          plusSpan.textContent = " + ";
+          row.appendChild(plusSpan);
         }
-        currentData.resources[index].available = newValue;
-        this.updateObjectiveFunction();
+      }
+
+      const leSpan = document.createElement("span");
+      leSpan.innerHTML = " &le; ";
+      row.appendChild(leSpan);
+
+      const rhsInput = this.createInput(resource.available, (val) => {
+        currentData.resources[i].available = val;
       });
-      availableCell.appendChild(availableInput);
+      rhsInput.min = "0";
+      row.appendChild(rhsInput);
+      this.restrictionsContainer.appendChild(row);
     });
 
-    // Додавання рядка прибутку
-    const profitRow = tbody.insertRow();
-    profitRow.className = "profit-row";
-    const profitCell = profitRow.insertCell();
-    profitCell.textContent = "Profit, $";
+    const objRow = document.createElement("div");
+    objRow.className = "objective-function-row";
 
-    data.prices.forEach((price, index) => {
-      const cell = profitRow.insertCell();
-      const input = document.createElement("input");
-      input.type = "number";
-      input.value = price.toString();
-      input.className = "editable-cell";
-      input.min = "0";
-      input.addEventListener("input", (e) => {
-        let newValue = parseFloat((e.target as HTMLInputElement).value) || 0;
-        if (newValue < 0) {
-          newValue = 0;
-          input.value = newValue.toString();
-        }
-        currentData.prices[index] = newValue;
+    const maxZSpan = document.createElement("span");
+    maxZSpan.textContent = "max Z = ";
+    objRow.appendChild(maxZSpan);
+
+    data.prices.forEach((price, j) => {
+      const input = this.createInput(price, (val) => {
+        currentData.prices[j] = val;
         this.updateObjectiveFunction();
       });
-      cell.appendChild(input);
+      objRow.appendChild(input);
+
+      const xSpan = document.createElement("span");
+      xSpan.innerHTML = `&bull;X<sub>${j + 1}</sub>`;
+      objRow.appendChild(xSpan);
+
+      if (j < data.productsCount - 1) {
+        const plusSpan = document.createElement("span");
+        plusSpan.textContent = " + ";
+        objRow.appendChild(plusSpan);
+      }
     });
 
-    // Порожня клітинка в кінці рядка прибутку
-    profitRow.insertCell().textContent = "-";
+    const zeroSpan = document.createElement("span");
+    zeroSpan.textContent = " + 0";
+    objRow.appendChild(zeroSpan);
+
+    this.objectiveFunctionContainer.appendChild(objRow);
+  }
+
+  private createInput(
+    value: number,
+    onChange: (newValue: number) => void
+  ): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.value = value.toString();
+    input.step = "1";
+
+    input.addEventListener("input", () => {
+      const newValue = parseFloat(input.value) || 0;
+
+      if (input.min === "0" && newValue < 0) {
+        input.value = "0";
+        this.showStatus("Values cannot be negative", "error");
+        return;
+      }
+
+      onChange(newValue);
+      console.log("currentData", currentData);
+
+      this.showStatus("Data updated", "success");
+    });
+
+    return input;
   }
 }
 
-// Initialize the interactive table manager when the DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
   new InteractiveTableManager();
 });

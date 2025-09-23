@@ -1,7 +1,10 @@
-import { LPData, ValidationError, DataValidationResult } from '../types/data.js';
+import {
+  LPData,
+  ValidationError,
+  DataValidationResult,
+} from "../types/data.js";
 
 export class DataService {
-  
   private static instance: DataService;
 
   private constructor() {}
@@ -12,8 +15,8 @@ export class DataService {
     }
     return DataService.instance;
   }
-  
-  public async loadData(filePath:string):Promise<LPData> {
+
+  public async loadData(filePath: string): Promise<LPData> {
     try {
       const response = await fetch(filePath);
       if (!response.ok) {
@@ -22,31 +25,39 @@ export class DataService {
       const data = await response.json();
       return data as LPData;
     } catch (error) {
-      throw new Error(`Failed to load data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to load data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
 
-  public validateData(data : LPData):DataValidationResult{
-    const errors : ValidationError[] = [];
+  public validateData(data: LPData): DataValidationResult {
+    const errors: ValidationError[] = [];
 
-    // Check required keys
-    const expectedKeys = ['resursCount', 'productsCount', 'resources', 'prices'];
+    const expectedKeys = [
+      "resursCount",
+      "productsCount",
+      "resources",
+      "prices",
+    ];
     const actualKeys = Object.keys(data);
 
-    expectedKeys.forEach(key => {
+    expectedKeys.forEach((key) => {
       if (!actualKeys.includes(key)) {
         errors.push({
           field: key,
-          message: `Missing required key '${key}'`
+          message: `Missing required key '${key}'`,
         });
       }
     });
 
-    actualKeys.forEach(key => {
+    actualKeys.forEach((key) => {
       if (!expectedKeys.includes(key)) {
         errors.push({
           field: key,
-          message: `Unknown key '${key}' in JSON`
+          message: `Unknown key '${key}' in JSON`,
         });
       }
     });
@@ -55,87 +66,88 @@ export class DataService {
       return { isValid: false, errors };
     }
 
-    // Validate numeric values (with auto-conversion)
     const toNumber = (value: any, fieldName: string): number => {
-      if (typeof value === 'string' && !isNaN(Number(value))) {
+      if (typeof value === "string" && !isNaN(Number(value))) {
         return Number(value);
       }
-      if (typeof value === 'number') return value;
+      if (typeof value === "number") return value;
       errors.push({
         field: fieldName,
-        message: `Field '${fieldName}' should be a number`
+        message: `Field '${fieldName}' should be a number`,
       });
       return NaN;
     };
 
-    data.resursCount = toNumber(data.resursCount, 'resursCount');
+    data.resursCount = toNumber(data.resursCount, "resursCount");
     if (data.resursCount <= 0) {
       errors.push({
-        field: 'resursCount',
-        message: "Field 'resursCount' should be > 0"
+        field: "resursCount",
+        message: "Field 'resursCount' should be > 0",
       });
     }
 
-    data.productsCount = toNumber(data.productsCount, 'productsCount');
+    data.productsCount = toNumber(data.productsCount, "productsCount");
     if (data.productsCount <= 0) {
       errors.push({
-        field: 'productsCount',
-        message: "Field 'productsCount' should be > 0"
+        field: "productsCount",
+        message: "Field 'productsCount' should be > 0",
       });
     }
 
-    // Validate resources
     if (!Array.isArray(data.resources)) {
       errors.push({
-        field: 'resources',
-        message: "'resources' should be an array"
+        field: "resources",
+        message: "'resources' should be an array",
       });
     } else if (data.resources.length !== data.resursCount) {
       errors.push({
-        field: 'resources',
-        message: `'resources' should contain exactly ${data.resursCount} elements (currently ${data.resources.length})`
+        field: "resources",
+        message: `'resources' should contain exactly ${data.resursCount} elements (currently ${data.resources.length})`,
       });
     } else {
       data.resources.forEach((res: any, idx: number) => {
-        if (typeof res !== 'object' || res === null) {
+        if (typeof res !== "object" || res === null) {
           errors.push({
             field: `resources[${idx}]`,
-            message: `Resource #${idx + 1} should be an object`
+            message: `Resource #${idx + 1} should be an object`,
           });
           return;
         }
 
         const resKeys = Object.keys(res);
-        const expectedResKeys = ['requirements', 'available'];
+        const expectedResKeys = ["requirements", "available"];
 
-        expectedResKeys.forEach(key => {
+        expectedResKeys.forEach((key) => {
           if (!resKeys.includes(key)) {
             errors.push({
               field: `resources[${idx}].${key}`,
-              message: `Resource #${idx + 1} missing key '${key}'`
+              message: `Resource #${idx + 1} missing key '${key}'`,
             });
           }
         });
 
-        resKeys.forEach(key => {
+        resKeys.forEach((key) => {
           if (!expectedResKeys.includes(key)) {
             errors.push({
               field: `resources[${idx}].${key}`,
-              message: `Resource #${idx + 1} has extra key '${key}'`
+              message: `Resource #${idx + 1} has extra key '${key}'`,
             });
           }
         });
 
-        // Validate requirements
         if (!Array.isArray(res.requirements)) {
           errors.push({
             field: `resources[${idx}].requirements`,
-            message: `Resource #${idx + 1}: 'requirements' should be an array`
+            message: `Resource #${idx + 1}: 'requirements' should be an array`,
           });
         } else if (res.requirements.length !== data.productsCount) {
           errors.push({
             field: `resources[${idx}].requirements`,
-            message: `Resource #${idx + 1}: 'requirements' should contain exactly ${data.productsCount} numbers`
+            message: `Resource #${
+              idx + 1
+            }: 'requirements' should contain exactly ${
+              data.productsCount
+            } numbers`,
           });
         } else {
           res.requirements = res.requirements.map((val: any, i: number) => {
@@ -144,37 +156,29 @@ export class DataService {
           });
         }
 
-        // Validate available
         res.available = toNumber(res.available, `resources[${idx}].available`);
         if (res.available < 0) {
           errors.push({
             field: `resources[${idx}].available`,
-            message: `Resource #${idx + 1}: 'available' should be ≥ 0`
+            message: `Resource #${idx + 1}: 'available' should be ≥ 0`,
           });
         }
       });
     }
 
-    // Validate prices
     if (!Array.isArray(data.prices)) {
       errors.push({
-        field: 'prices',
-        message: "'prices' should be an array"
+        field: "prices",
+        message: "'prices' should be an array",
       });
     } else if (data.prices.length !== data.productsCount) {
       errors.push({
-        field: 'prices',
-        message: `'prices' should contain exactly ${data.productsCount} numbers (currently ${data.prices.length})`
+        field: "prices",
+        message: `'prices' should contain exactly ${data.productsCount} numbers (currently ${data.prices.length})`,
       });
     } else {
       data.prices = data.prices.map((val: any, i: number) => {
         const num = toNumber(val, `prices[${i}]`);
-        if (num < 0) {
-          errors.push({
-            field: `prices[${i}]`,
-            message: `Product #${i + 1} price should be ≥ 0`
-          });
-        }
         return num;
       });
     }
@@ -182,7 +186,7 @@ export class DataService {
     return {
       isValid: errors.length === 0,
       errors,
-      data: errors.length === 0 ? data as LPData : undefined
+      data: errors.length === 0 ? (data as LPData) : undefined,
     };
   }
 }

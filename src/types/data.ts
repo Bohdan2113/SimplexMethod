@@ -6,7 +6,7 @@ export interface Resource {
 export interface LPData {
   resursCount: number;
   productsCount: number;
-  resources: Resource[];
+  resources: Resource[];    
   prices: number[];
 }
 

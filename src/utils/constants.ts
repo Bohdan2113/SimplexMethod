@@ -1,3 +1,6 @@
-export const DATA_FILE_PATH = '../data/Bogdan.json';
+export const DATA_FILE_PATH = "../data/Bogdan.json";
+// export const DATA_FILE_PATH = "../data/Bogdan_2.json";
 // export const DATA_FILE_PATH = '../data/Ivanna.json';
 // export const DATA_FILE_PATH = "../data/exampleData.json";
+
+export const SIMPLEX_TABLE_CONSTRAINT = 100;

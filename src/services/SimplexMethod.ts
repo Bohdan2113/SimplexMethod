@@ -2,6 +2,7 @@ import { ClearTableContainer, SimplexTable } from "./SimplexTable.js";
 import { SimplexTableData, subscripts } from "../types/table.js";
 import { currentData } from "./displayLogic.js";
 import { LPData } from "../types/data.js";
+import { SIMPLEX_TABLE_CONSTRAINT } from "../utils/constants.js";
 
 const solveBtn = document.getElementById("solveBtn") as HTMLButtonElement;
 let TableCount: number;
@@ -16,7 +17,10 @@ function solveBySimplexMethod() {
   outputTable(tableData, TableCount);
 
   do {
-    if (!tableData.qRow.slice(1).some((value) => value < 0) || TableCount > 10)
+    if (
+      !tableData.qRow.slice(1).some((value) => value < 0) ||
+      TableCount > SIMPLEX_TABLE_CONSTRAINT
+    )
       break;
 
     const pivotColumn = findPivotColumn(tableData);
@@ -107,17 +111,15 @@ function solveBySimplexMethod() {
     pivotColumn: number,
     pivotElement: number
   ) {
-    // 1. Нормалізуємо опорний рядок
     tableData.mainMatrix[pivotRow] = tableData.mainMatrix[pivotRow].map(
       (value) => value / pivotElement
     );
     tableData.p0Values[pivotRow] = tableData.p0Values[pivotRow] / pivotElement;
 
-    // 2. Оновлюємо всі інші рядки
     for (let r = 0; r < tableData.mainMatrix.length; r++) {
       if (r === pivotRow) continue;
 
-      const factor = tableData.mainMatrix[r][pivotColumn];
+      const factor = tableData.mainMatrix[r][pivotColumn]; 
 
       tableData.mainMatrix[r] = tableData.mainMatrix[r].map(
         (value, cIndex) =>
@@ -127,8 +129,7 @@ function solveBySimplexMethod() {
         tableData.p0Values[r] - factor * tableData.p0Values[pivotRow];
     }
 
-    // 3. Оновлюємо рядок z (останній)
-    const factorZ = tableData.qRow[pivotColumn + 1]; // +1 бо qRow має зсув
+    const factorZ = tableData.qRow[pivotColumn + 1];
     tableData.qRow = tableData.qRow.map(
       (value, cIndex) =>
         value -
@@ -138,7 +139,6 @@ function solveBySimplexMethod() {
             : tableData.mainMatrix[pivotRow][cIndex - 1])
     );
 
-    // 4. Оновлюємо базис
     tableData.xValues[pivotRow] = `${pivotColumn + 1}`;
     tableData.cbValues[pivotRow] = tableData.cValues[pivotColumn];
   }
@@ -150,40 +150,36 @@ function solveBySimplexMethod() {
     );
     myTable.fillData(tableData, TableCount);
   }
-  function outputSolution(tableData: SimplexTableData) {
-    const solution = document.getElementById(
-      "symplexSolution"
-    ) as HTMLDivElement;
+}
 
-    // Створюємо вектор рішення
-    const solutionVector: number[] = new Array(
-      currentData.productsCount + currentData.resursCount
-    ).fill(0);
+function outputSolution(tableData: SimplexTableData) {
+  const solution = document.getElementById("symplexSolution") as HTMLDivElement;
 
-    const vars: string[] = [];
-    for (let i = 0; i < currentData.productsCount; i++) {
-      vars.push(`x${subscripts[i + 1]}`);
-    }
+  const solutionVector: number[] = new Array(
+    currentData.productsCount + currentData.resursCount
+  ).fill(0);
 
-    // Заповнюємо значення змінних з таблиці
-    for (let i = 0; i < currentData.resursCount; i++) {
-      const variableIndex = parseInt(tableData.xValues[i]) - 1;
-      if (variableIndex >= 0 && variableIndex < solutionVector.length) {
-        solutionVector[variableIndex] = SimplexTable.RoundValueOutput(
-          tableData.p0Values[i]
-        );
-      }
-    }
-
-    // Форматуємо вектор як (x1, x2, x3, ...)
-    const varsString = `(${vars.join(", ")})`;
-    const vectorString = `(${solutionVector
-      .slice(0, currentData.productsCount)
-      .join(", ")})`;
-    const maxValue = SimplexTable.RoundValueOutput(tableData.qRow[0]);
-
-    solution.innerHTML = `X* = (${solutionVector.join(
-      ", "
-    )})<br><strong>Q = ${maxValue}</strong> is achived at <strong>${varsString} = ${vectorString}</strong>`;
+  const vars: string[] = [];
+  for (let i = 0; i < currentData.productsCount; i++) {
+    vars.push(`x${subscripts[i + 1]}`);
   }
+
+  for (let i = 0; i < currentData.resursCount; i++) {
+    const variableIndex = parseInt(tableData.xValues[i]) - 1;
+    if (variableIndex >= 0 && variableIndex < solutionVector.length) {
+      solutionVector[variableIndex] = SimplexTable.RoundValueOutput(
+        tableData.p0Values[i]
+      );
+    }
+  }
+
+  const varsString = `(${vars.join(", ")})`;
+  const vectorString = `(${solutionVector
+    .slice(0, currentData.productsCount)
+    .join(", ")})`;
+  const maxValue = SimplexTable.RoundValueOutput(tableData.qRow[0]);
+
+  solution.innerHTML = `X* = (${solutionVector.join(
+    ", "
+  )})<br><strong>Q = ${maxValue}</strong> is achived at <strong>${varsString} = ${vectorString}</strong>`;
 }

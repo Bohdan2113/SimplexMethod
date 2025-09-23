@@ -1,5 +1,5 @@
 {
-  "resursCount": 3,
+  "resursCount": 5,
   "productsCount": 3,
   "resources": [
     {
@@ -13,6 +13,14 @@
     {
       "requirements": [2, 1, 3],
       "available": 20
+    },
+    {
+      "requirements": [1, -1, 0],
+      "available": 1
+    },
+    {
+      "requirements": [0, 0, 1],
+      "available": 2
     }
   ],
   "prices": [30, 20, 40]
