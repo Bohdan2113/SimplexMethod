@@ -7,15 +7,15 @@ import { subscripts } from "../types/table.js";
 import { DataService } from "./DataService.js";
 import { DATA_FILE_PATH } from "../utils/constants.js";
 
-export let currentData: LPData = {
-  resursCount: 1,
-  productsCount: 1,
-  resources: [{ requirements: [0], available: 0 }],
-  prices: [0],
-};
-
 export class InteractiveTableManager {
   private dataService: DataService;
+
+  private currentData: LPData = {
+    resursCount: 1,
+    productsCount: 1,
+    resources: [{ requirements: [0], available: 0 }],
+    prices: [0],
+  };
 
   private loadButton!: HTMLButtonElement;
   private statusElement!: HTMLElement;
@@ -70,25 +70,25 @@ export class InteractiveTableManager {
 
   private createInitialForm(): void {
     this.syncControlsWithData();
-    this.renderForm(currentData);
+    this.renderForm(this.currentData);
     this.updateObjectiveFunction();
   }
 
   private syncControlsWithData(): void {
-    this.numVariablesInput.value = currentData.productsCount.toString();
-    this.numRestrictionsInput.value = currentData.resursCount.toString();
+    this.numVariablesInput.value = this.currentData.productsCount.toString();
+    this.numRestrictionsInput.value = this.currentData.resursCount.toString();
   }
 
   private onVariablesCountChange(): void {
     const newCount = parseInt(this.numVariablesInput.value) || 1;
     if (newCount < 1 || newCount > 10) {
       this.showStatus("Number of variables must be between 1 and 10", "error");
-      this.numVariablesInput.value = currentData.productsCount.toString();
+      this.numVariablesInput.value = this.currentData.productsCount.toString();
       return;
     }
 
-    this.updateDataStructure(newCount, currentData.resursCount);
-    this.renderForm(currentData);
+    this.updateDataStructure(newCount, this.currentData.resursCount);
+    this.renderForm(this.currentData);
     this.updateObjectiveFunction();
     this.showStatus(`Updated to ${newCount} variables`, "success");
   }
@@ -100,12 +100,12 @@ export class InteractiveTableManager {
         "Number of restrictions must be between 1 and 10",
         "error"
       );
-      this.numRestrictionsInput.value = currentData.resursCount.toString();
+      this.numRestrictionsInput.value = this.currentData.resursCount.toString();
       return;
     }
 
-    this.updateDataStructure(currentData.productsCount, newCount);
-    this.renderForm(currentData);
+    this.updateDataStructure(this.currentData.productsCount, newCount);
+    this.renderForm(this.currentData);
     this.updateObjectiveFunction();
     this.showStatus(`Updated to ${newCount} restrictions`, "success");
   }
@@ -114,21 +114,24 @@ export class InteractiveTableManager {
     newVariablesCount: number,
     newRestrictionsCount: number
   ): void {
-    currentData.productsCount = newVariablesCount;
+    this.currentData.productsCount = newVariablesCount;
 
-    if (newVariablesCount > currentData.prices.length) {
-      for (let i = currentData.prices.length; i < newVariablesCount; i++) {
-        currentData.prices.push(0);
+    if (newVariablesCount > this.currentData.prices.length) {
+      for (let i = this.currentData.prices.length; i < newVariablesCount; i++) {
+        this.currentData.prices.push(0);
       }
-    } else if (newVariablesCount < currentData.prices.length) {
-      currentData.prices = currentData.prices.slice(0, newVariablesCount);
+    } else if (newVariablesCount < this.currentData.prices.length) {
+      this.currentData.prices = this.currentData.prices.slice(
+        0,
+        newVariablesCount
+      );
     }
 
-    currentData.resursCount = newRestrictionsCount;
+    this.currentData.resursCount = newRestrictionsCount;
 
-    if (newRestrictionsCount > currentData.resources.length) {
+    if (newRestrictionsCount > this.currentData.resources.length) {
       for (
-        let i = currentData.resources.length;
+        let i = this.currentData.resources.length;
         i < newRestrictionsCount;
         i++
       ) {
@@ -136,16 +139,16 @@ export class InteractiveTableManager {
           requirements: new Array(newVariablesCount).fill(0),
           available: 0,
         };
-        currentData.resources.push(newResource);
+        this.currentData.resources.push(newResource);
       }
-    } else if (newRestrictionsCount < currentData.resources.length) {
-      currentData.resources = currentData.resources.slice(
+    } else if (newRestrictionsCount < this.currentData.resources.length) {
+      this.currentData.resources = this.currentData.resources.slice(
         0,
         newRestrictionsCount
       );
     }
 
-    currentData.resources.forEach((resource) => {
+    this.currentData.resources.forEach((resource) => {
       if (resource.requirements.length < newVariablesCount) {
         for (let i = resource.requirements.length; i < newVariablesCount; i++) {
           resource.requirements.push(0);
@@ -176,9 +179,9 @@ export class InteractiveTableManager {
         return;
       }
 
-      currentData = data;
+      this.currentData = data;
       this.syncControlsWithData();
-      this.renderForm(currentData);
+      this.renderForm(this.currentData);
       this.updateObjectiveFunction();
       this.showStatus("Data loaded successfully!", "success");
     } catch (error) {
@@ -201,7 +204,7 @@ export class InteractiveTableManager {
     }
     const terms: string[] = [],
       vars: string[] = [];
-    currentData.prices.forEach((price, i) => {
+    this.currentData.prices.forEach((price, i) => {
       if (price !== 0) {
         vars.push(`x${subscripts[i + 1]}`);
         terms.push(`${price}x${subscripts[i + 1]}`);
@@ -212,12 +215,12 @@ export class InteractiveTableManager {
         ? "Q(...) = 0 → max"
         : `Q(${vars.join(",")}) = ${terms.join(" + ")} → max`;
     this.objectiveFunctionElement.className = "objective-function valid";
-    this.nonNegativityConstraint.innerHTML = `X<sub>i</sub> &ge; 0, where i = 1,...,${currentData.productsCount}`;
+    this.nonNegativityConstraint.innerHTML = `X<sub>i</sub> &ge; 0, where i = 1,...,${this.currentData.productsCount}`;
   }
 
   private isDataValid(): boolean {
-    for (const p of currentData.prices) if (isNaN(p)) return false;
-    for (const r of currentData.resources)
+    for (const p of this.currentData.prices) if (isNaN(p)) return false;
+    for (const r of this.currentData.resources)
       if (isNaN(r.available) || r.available < 0) return false;
     return true;
   }
@@ -257,7 +260,8 @@ export class InteractiveTableManager {
 
       for (let j = 0; j < data.productsCount; j++) {
         const input = this.createInput(resource.requirements[j], (val) => {
-          currentData.resources[i].requirements[j] = val;
+          this.currentData.resources[i].requirements[j] = val;
+          console.log("this.currentData", this.currentData);
         });
         row.appendChild(input);
 
@@ -277,7 +281,7 @@ export class InteractiveTableManager {
       row.appendChild(leSpan);
 
       const rhsInput = this.createInput(resource.available, (val) => {
-        currentData.resources[i].available = val;
+        this.currentData.resources[i].available = val;
       });
       rhsInput.min = "0";
       row.appendChild(rhsInput);
@@ -293,7 +297,7 @@ export class InteractiveTableManager {
 
     data.prices.forEach((price, j) => {
       const input = this.createInput(price, (val) => {
-        currentData.prices[j] = val;
+        this.currentData.prices[j] = val;
         this.updateObjectiveFunction();
       });
       objRow.appendChild(input);
@@ -335,15 +339,14 @@ export class InteractiveTableManager {
       }
 
       onChange(newValue);
-      console.log("currentData", currentData);
 
       this.showStatus("Data updated", "success");
     });
 
     return input;
   }
-}
 
-document.addEventListener("DOMContentLoaded", () => {
-  new InteractiveTableManager();
-});
+  public getCurrentData(): LPData {
+    return this.currentData;
+  }
+}

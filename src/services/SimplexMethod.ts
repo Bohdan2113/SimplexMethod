@@ -1,44 +1,43 @@
-import { ClearTableContainer, SimplexTable } from "./SimplexTable.js";
+import { SimplexTable } from "./SimplexTable.js";
 import { SimplexTableData, subscripts } from "../types/table.js";
-import { currentData } from "./displayLogic.js";
 import { LPData } from "../types/data.js";
 import { SIMPLEX_TABLE_CONSTRAINT } from "../utils/constants.js";
+import { displayLogic } from "./index.js";
 
-const solveBtn = document.getElementById("solveBtn") as HTMLButtonElement;
-let TableCount: number;
-solveBtn.addEventListener("click", () => {
-  TableCount = 1;
-  ClearTableContainer("symplexTables");
-  solveBySimplexMethod();
-});
+export function solveBySimplexMethod() {
+  let currentData: LPData;
+  // Додаємо невелику затримку, щоб переконатися, що всі зміни в полях вводу були оброблені
+  setTimeout(() => {
+    currentData = displayLogic.getCurrentData();
+    let TableCount: number = 1;
 
-function solveBySimplexMethod() {
-  let tableData: SimplexTableData = convertToTableData(currentData);
-  outputTable(tableData, TableCount);
+    let tableData: SimplexTableData = convertToTableData(currentData);
+    outputTable(tableData, TableCount, currentData);
 
-  do {
-    if (
-      !tableData.qRow.slice(1).some((value) => value < 0) ||
-      TableCount > SIMPLEX_TABLE_CONSTRAINT
-    )
-      break;
+    do {
+      if (
+        !tableData.qRow.slice(1).some((value) => value < 0) ||
+        TableCount > SIMPLEX_TABLE_CONSTRAINT
+      )
+        break;
 
-    const pivotColumn = findPivotColumn(tableData);
-    const pivotRow = findPivotRow(tableData, pivotColumn);
-    const pivotElement = tableData.mainMatrix[pivotRow][pivotColumn];
+      const pivotColumn = findPivotColumn(tableData);
+      const pivotRow = findPivotRow(tableData, pivotColumn);
+      const pivotElement = tableData.mainMatrix[pivotRow][pivotColumn];
 
-    RecalculateTableDataByRectangleRule(
-      tableData,
-      pivotRow,
-      pivotColumn,
-      pivotElement
-    );
+      RecalculateTableDataByRectangleRule(
+        tableData,
+        pivotRow,
+        pivotColumn,
+        pivotElement
+      );
 
-    SimplexTable.HighlightPivot(pivotRow, pivotColumn, TableCount++);
-    outputTable(tableData, TableCount);
-  } while (true);
+      SimplexTable.HighlightPivot(pivotRow, pivotColumn, TableCount++);
+      outputTable(tableData, TableCount, currentData);
+    } while (true);
 
-  outputSolution(tableData);
+    outputSolution(tableData);
+  }, 10); // Затримка 10мс
 
   function convertToTableData(currentData: LPData): SimplexTableData {
     const cValues = currentData.prices.concat(
@@ -119,7 +118,7 @@ function solveBySimplexMethod() {
     for (let r = 0; r < tableData.mainMatrix.length; r++) {
       if (r === pivotRow) continue;
 
-      const factor = tableData.mainMatrix[r][pivotColumn]; 
+      const factor = tableData.mainMatrix[r][pivotColumn];
 
       tableData.mainMatrix[r] = tableData.mainMatrix[r].map(
         (value, cIndex) =>
@@ -142,7 +141,11 @@ function solveBySimplexMethod() {
     tableData.xValues[pivotRow] = `${pivotColumn + 1}`;
     tableData.cbValues[pivotRow] = tableData.cValues[pivotColumn];
   }
-  function outputTable(tableData: SimplexTableData, TableCount: number) {
+  function outputTable(
+    tableData: SimplexTableData,
+    TableCount: number,
+    currentData: LPData
+  ) {
     const myTable = new SimplexTable(
       currentData.resursCount,
       currentData.productsCount + currentData.resursCount,
@@ -153,6 +156,7 @@ function solveBySimplexMethod() {
 }
 
 function outputSolution(tableData: SimplexTableData) {
+  const currentData = displayLogic.getCurrentData();
   const solution = document.getElementById("symplexSolution") as HTMLDivElement;
 
   const solutionVector: number[] = new Array(
