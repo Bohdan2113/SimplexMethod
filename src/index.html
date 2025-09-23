@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Data Viewer</title>
+    <title>Simplex & Dual Simplex Solver</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="container">
       <header>
-        <h1>Linear Programming Data</h1>
+        <h1>Linear Programming Solver</h1>
       </header>
 
       <main>
@@ -35,7 +35,7 @@
               <input
                 type="number"
                 id="numRestrictions"
-                value="4"
+                value="3"
                 min="1"
                 max="10"
               />
@@ -50,14 +50,26 @@
           <div class="section">
             <h2>Objective function</h2>
             <div id="objectiveFunctionContainer"></div>
+            <div id="objectiveTypeContainer" class="input-group">
+              <label for="objectiveType">Objective:</label>
+              <select id="objectiveType">
+                <option value="max" selected>Maximize</option>
+                <option value="min">Minimize</option>
+              </select>
+            </div>
           </div>
-
-          <p id="nonNegativityConstraint" class="info-text"></p>
         </div>
 
         <div class="solve-controls">
           <div id="objectiveFunction" class="objective-function">
             <!-- Objective function will be displayed here -->
+          </div>
+          <div class="input-group">
+            <label for="solveMethod">Method:</label>
+            <select id="solveMethod">
+              <option value="simplex" selected>Simplex Method</option>
+              <option value="dual-simplex">Dual Simplex Method</option>
+            </select>
           </div>
           <button id="solveBtn" class="solve-btn">Solve</button>
         </div>

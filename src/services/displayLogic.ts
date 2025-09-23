@@ -2,6 +2,8 @@ import {
   DataValidationResult,
   LPData,
   ValidationError,
+  ObjectiveType,
+  RestrictionSign,
 } from "../types/data.js";
 import { subscripts } from "../types/table.js";
 import { DataService } from "./DataService.js";
@@ -9,12 +11,16 @@ import { DATA_FILE_PATH } from "../utils/constants.js";
 
 export class InteractiveTableManager {
   private dataService: DataService;
-
+  private objectiveTypeSelect!: HTMLSelectElement;
   private currentData: LPData = {
-    resursCount: 1,
-    productsCount: 1,
-    resources: [{ requirements: [0], available: 0 }],
-    prices: [0],
+    resursCount: 2,
+    productsCount: 2,
+    resources: [
+      { requirements: [0, 0], available: 0, sign: "<=" },
+      { requirements: [0, 0], available: 0, sign: "<=" },
+    ],
+    prices: [0, 0],
+    objective: "max",
   };
 
   private loadButton!: HTMLButtonElement;
@@ -24,7 +30,8 @@ export class InteractiveTableManager {
   private restrictionsContainer!: HTMLElement;
   private objectiveFunctionContainer!: HTMLElement;
   private objectiveFunctionElement!: HTMLElement;
-  private nonNegativityConstraint!: HTMLElement;
+  private solveMethodSelect!: HTMLSelectElement;
+  private objectiveTypeContainer!: HTMLElement;
 
   constructor() {
     this.dataService = DataService.getInstance();
@@ -53,8 +60,14 @@ export class InteractiveTableManager {
     this.objectiveFunctionElement = document.getElementById(
       "objectiveFunction"
     ) as HTMLElement;
-    this.nonNegativityConstraint = document.getElementById(
-      "nonNegativityConstraint"
+    this.objectiveTypeSelect = document.getElementById(
+      "objectiveType"
+    ) as HTMLSelectElement;
+    this.solveMethodSelect = document.getElementById(
+      "solveMethod"
+    ) as HTMLSelectElement;
+    this.objectiveTypeContainer = document.getElementById(
+      "objectiveTypeContainer"
     ) as HTMLElement;
   }
 
@@ -66,17 +79,35 @@ export class InteractiveTableManager {
     this.numRestrictionsInput.addEventListener("input", () =>
       this.onRestrictionsCountChange()
     );
+    this.objectiveTypeSelect.addEventListener("change", () => {
+      this.currentData.objective = this.objectiveTypeSelect
+        .value as ObjectiveType;
+      this.updateObjectiveFunction();
+    });
+    this.solveMethodSelect.addEventListener("change", () => {
+      this.onUpdateSolveMethod();
+    });
   }
 
   private createInitialForm(): void {
     this.syncControlsWithData();
     this.renderForm(this.currentData);
     this.updateObjectiveFunction();
+    this.onUpdateSolveMethod();
   }
 
   private syncControlsWithData(): void {
     this.numVariablesInput.value = this.currentData.productsCount.toString();
     this.numRestrictionsInput.value = this.currentData.resursCount.toString();
+  }
+
+  private onUpdateSolveMethod(): void {
+    const selectedMethod = this.solveMethodSelect.value;
+    if (selectedMethod === "simplex") {
+      this.objectiveTypeContainer.style.display = "none";
+    } else if (selectedMethod === "dual-simplex") {
+      this.objectiveTypeContainer.style.display = "block";
+    }
   }
 
   private onVariablesCountChange(): void {
@@ -138,6 +169,7 @@ export class InteractiveTableManager {
         const newResource = {
           requirements: new Array(newVariablesCount).fill(0),
           available: 0,
+          sign: "<=" as RestrictionSign,
         };
         this.currentData.resources.push(newResource);
       }
@@ -210,12 +242,13 @@ export class InteractiveTableManager {
         terms.push(`${price}x${subscripts[i + 1]}`);
       }
     });
+    const objectiveText =
+      this.currentData.objective === "max" ? "→ max" : "→ min";
     this.objectiveFunctionElement.textContent =
       terms.length === 0
-        ? "Q(...) = 0 → max"
-        : `Q(${vars.join(",")}) = ${terms.join(" + ")} → max`;
+        ? `Q(...) = 0 ${objectiveText}`
+        : `Q(${vars.join(",")}) = ${terms.join(" + ")} ${objectiveText}`;
     this.objectiveFunctionElement.className = "objective-function valid";
-    this.nonNegativityConstraint.innerHTML = `X<sub>i</sub> &ge; 0, where i = 1,...,${this.currentData.productsCount}`;
   }
 
   private isDataValid(): boolean {
@@ -248,6 +281,7 @@ export class InteractiveTableManager {
   private renderForm(data: LPData): void {
     this.restrictionsContainer.innerHTML = "";
     this.objectiveFunctionContainer.innerHTML = "";
+    const selectedMethod = this.solveMethodSelect.value;
 
     data.resources.forEach((resource, i) => {
       const row = document.createElement("div");
@@ -259,10 +293,14 @@ export class InteractiveTableManager {
       row.appendChild(label);
 
       for (let j = 0; j < data.productsCount; j++) {
-        const input = this.createInput(resource.requirements[j], (val) => {
-          this.currentData.resources[i].requirements[j] = val;
-          console.log("this.currentData", this.currentData);
-        });
+        const input = this.createInput(
+          resource.requirements[j],
+          (val) => {
+            this.currentData.resources[i].requirements[j] = val;
+            console.log("this.currentData", this.currentData);
+          },
+          false
+        );
         row.appendChild(input);
 
         const xSpan = document.createElement("span");
@@ -276,14 +314,30 @@ export class InteractiveTableManager {
         }
       }
 
-      const leSpan = document.createElement("span");
-      leSpan.innerHTML = " &le; ";
-      row.appendChild(leSpan);
-
-      const rhsInput = this.createInput(resource.available, (val) => {
-        this.currentData.resources[i].available = val;
+      const signSelect = document.createElement("select");
+      signSelect.className = "restriction-sign";
+      ["<=", ">=", "="].forEach((sign) => {
+        const option = document.createElement("option");
+        option.value = sign;
+        option.textContent = sign.replace("<=", "≤").replace(">=", "≥");
+        if (sign === resource.sign) {
+          option.selected = true;
+        }
+        signSelect.appendChild(option);
       });
-      rhsInput.min = "0";
+      signSelect.addEventListener("change", () => {
+        this.currentData.resources[i].sign =
+          signSelect.value as RestrictionSign;
+      });
+      row.appendChild(signSelect);
+
+      const rhsInput = this.createInput(
+        resource.available,
+        (val) => {
+          this.currentData.resources[i].available = val;
+        },
+        selectedMethod === "simplex" ? true : false
+      );
       row.appendChild(rhsInput);
       this.restrictionsContainer.appendChild(row);
     });
@@ -296,10 +350,14 @@ export class InteractiveTableManager {
     objRow.appendChild(maxZSpan);
 
     data.prices.forEach((price, j) => {
-      const input = this.createInput(price, (val) => {
-        this.currentData.prices[j] = val;
-        this.updateObjectiveFunction();
-      });
+      const input = this.createInput(
+        price,
+        (val) => {
+          this.currentData.prices[j] = val;
+          this.updateObjectiveFunction();
+        },
+        selectedMethod === "simplex" ? true : false
+      );
       objRow.appendChild(input);
 
       const xSpan = document.createElement("span");
@@ -322,17 +380,22 @@ export class InteractiveTableManager {
 
   private createInput(
     value: number,
-    onChange: (newValue: number) => void
+    onChange: (newValue: number) => void,
+    nonNegative: boolean = true
   ): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "number";
     input.value = value.toString();
     input.step = "1";
 
+    if (nonNegative) {
+      input.min = "0";
+    }
+
     input.addEventListener("input", () => {
       const newValue = parseFloat(input.value) || 0;
 
-      if (input.min === "0" && newValue < 0) {
+      if (nonNegative && newValue < 0) {
         input.value = "0";
         this.showStatus("Values cannot be negative", "error");
         return;
