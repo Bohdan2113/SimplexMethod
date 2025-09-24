@@ -1,12 +1,11 @@
 // types/data.ts
 
 export type RestrictionSign = "<=" | ">=" | "=";
-export type ObjectiveType = "max" | "min";
 
 export interface Resource {
   requirements: number[];
   available: number;
-  sign: RestrictionSign; // Додано
+  sign: RestrictionSign;
 }
 
 export interface LPData {
@@ -14,7 +13,6 @@ export interface LPData {
   productsCount: number;
   resources: Resource[];
   prices: number[];
-  objective?: ObjectiveType; // Додано
 }
 
 export interface ValidationError {

@@ -1,183 +1,282 @@
 // services/DualSimplexMethod.ts
 
 import { displayLogic } from "./index.js";
-import { LPData } from "../types/data.js";
-import { SimplexTableData } from "../types/table.js";
+import { LPData, Resource } from "../types/data.js";
+import { SimplexTableData, subscripts } from "../types/table.js";
 import { SimplexTable } from "./SimplexTable.js";
 
-let tableCounter = 1;
-
 export function solveByDualSimplexMethod() {
-  tableCounter = 1;
-  const initialData: LPData = displayLogic.getCurrentData();
+  let tableCounter = 1;
+  const primalData: LPData = displayLogic.getCurrentData();
 
-  // 1. Приведення до канонічного вигляду для ДСМ
-  // Цільова функція завжди max
-  let objectiveCoeffs = [...initialData.prices];
-  if (initialData.objective === "min") {
-    objectiveCoeffs = objectiveCoeffs.map((c) => -c);
-  }
+  const dualObjectiveType = "min";
+  const dualTaskData = TransformToDualData(primalData);
+  OutputDualTaskConditions(dualTaskData, dualObjectiveType);
 
-  // Обмеження типу '≤'
-  const constraints = initialData.resources.map((res) => {
-    if (res.sign === ">=") {
-      return {
-        requirements: res.requirements.map((r) => -r),
-        available: -res.available,
-      };
-    }
-    return { ...res };
-  });
-
-  // 2. Створення початкової таблиці
-  const numVariables = initialData.productsCount;
-  const numRestrictions = initialData.resursCount;
-  const numTotalVars = numVariables + numRestrictions;
-
-  const cValues = [
-    ...objectiveCoeffs,
-    ...new Array(numRestrictions).fill(0),
-  ];
-  let mainMatrix: number[][] = [];
-  for (let i = 0; i < numRestrictions; i++) {
-    const row = [...constraints[i].requirements];
-    const slackVars = new Array(numRestrictions).fill(0);
-    slackVars[i] = 1;
-    mainMatrix.push([...row, ...slackVars]);
-  }
-
-  let p0Values = constraints.map((c) => c.available);
-  let cbValues = new Array(numRestrictions).fill(0);
-  let xValues = Array.from(
-    { length: numRestrictions },
-    (_, i) => `${numVariables + i + 1}`
+  const constraintsForSolver = TransformToCanonicalForm(dualTaskData);
+  let tableData = convertDualToTableData(
+    constraintsForSolver,
+    dualObjectiveType
   );
 
-  // 3. Обчислення Q-рядка
-  const calculateQRow = () => {
-    const qRow = [0, ...new Array(numTotalVars).fill(0)];
-    for (let j = 0; j < numTotalVars; j++) {
-      let sum = 0;
-      for (let i = 0; i < numRestrictions; i++) {
-        sum += cbValues[i] * mainMatrix[i][j];
-      }
-      qRow[j + 1] = cValues[j] - sum;
-    }
-
-    let qP0 = 0;
-    for (let i = 0; i < numRestrictions; i++) {
-      qP0 += cbValues[i] * p0Values[i];
-    }
-    qRow[0] = qP0;
-    return qRow;
-  };
-
-  let qRow = calculateQRow();
-
-  // Перевірка на двоїсту допустимість (усі елементи Q-рядка >= 0)
-  if (qRow.slice(1).some((q) => q < 0)) {
+  if (tableData.qRow.slice(1).some((q) => q < 0)) {
     const solutionElement = document.getElementById("symplexSolution")!;
-    solutionElement.innerHTML = `<h2>Error</h2><p>The initial table is not dually feasible (some Q-row values are negative). The dual simplex method cannot be applied.</p>`;
+    solutionElement.innerHTML += `<h2>Error</h2><p>The initial dual table is not dually feasible. The dual simplex method cannot be applied.</p>`;
     return;
   }
 
-  // 4. Ітераційний процес
-  while (p0Values.some((p) => p < 0)) {
-    const tableData: SimplexTableData = {
-      cValues,
-      xValues,
-      cbValues,
-      p0Values,
-      mainMatrix,
-      qRow,
-    };
-    const table = new SimplexTable(
-      numRestrictions,
-      numTotalVars,
-      tableCounter
-    );
-    table.fillData(tableData, tableCounter);
+  outputDualTable(tableData, tableCounter);
+  while (tableData.p0Values.some((p) => p < 0)) {
+    const pivotRow = findDualPivotRow(tableData);
+    if (pivotRow === -1) break;
 
-    // a. Знайти напрямний рядок (pivot row)
-    let pivotRowIndex = -1;
-    let minP0 = 0;
-    p0Values.forEach((p, i) => {
-      if (p < minP0) {
-        minP0 = p;
-        pivotRowIndex = i;
-      }
-    });
-
-    if (pivotRowIndex === -1) break; // Вихід, якщо немає від'ємних P0
-
-    // b. Знайти напрямний стовпець (pivot column)
-    const pivotRow = mainMatrix[pivotRowIndex];
-    let minRatio = Infinity;
-    let pivotColumnIndex = -1;
-
-    for (let j = 0; j < numTotalVars; j++) {
-      if (pivotRow[j] < 0) {
-        // Умова для ДСМ: елемент в напрямному рядку має бути від'ємним
-        const ratio = Math.abs(qRow[j + 1] / pivotRow[j]);
-        if (ratio < minRatio) {
-          minRatio = ratio;
-          pivotColumnIndex = j;
-        }
-      }
-    }
-
-    if (pivotColumnIndex === -1) {
+    const pivotColumn = findDualPivotColumn(tableData, pivotRow);
+    if (pivotColumn === -1) {
       const solutionElement = document.getElementById("symplexSolution")!;
-      solutionElement.innerHTML = `<h2>Result</h2><p>The problem has no feasible solution.</p>`;
+      solutionElement.innerHTML += `<h2>Result</h2><p>The dual problem has no feasible solution.</p>`;
       return;
     }
 
-    SimplexTable.HighlightPivot(pivotRowIndex, pivotColumnIndex, tableCounter);
+    SimplexTable.HighlightPivot(pivotRow, pivotColumn, tableCounter);
 
-    // c. Перерахунок таблиці
-    const pivotElement = mainMatrix[pivotRowIndex][pivotColumnIndex];
+    recalculateDualTable(tableData, pivotRow, pivotColumn);
 
-    // Оновлення базису
-    xValues[pivotRowIndex] = `${pivotColumnIndex + 1}`;
-    cbValues[pivotRowIndex] = cValues[pivotColumnIndex];
-
-    // Оновлення напрямного рядка
-    const newPivotRow = mainMatrix[pivotRowIndex].map((val) => val / pivotElement);
-    p0Values[pivotRowIndex] = p0Values[pivotRowIndex] / pivotElement;
-
-    // Оновлення інших рядків
-    const newMainMatrix = mainMatrix.map((row, i) => {
-      if (i === pivotRowIndex) return newPivotRow;
-      const factor = row[pivotColumnIndex];
-      p0Values[i] -= factor * p0Values[pivotRowIndex];
-      return row.map((val, j) => val - factor * newPivotRow[j]);
-    });
-
-    mainMatrix = newMainMatrix;
-    qRow = calculateQRow();
     tableCounter++;
+    outputDualTable(tableData, tableCounter);
   }
 
-  // 5. Виведення фінальної таблиці та результату
-  const finalTableData: SimplexTableData = { cValues, xValues, cbValues, p0Values, mainMatrix, qRow };
-  const finalTable = new SimplexTable(numRestrictions, numTotalVars, tableCounter);
-  finalTable.fillData(finalTableData, tableCounter);
+  OutputSolution(tableData);
+}
 
+function TransformToDualData(primalData: LPData): LPData {
+  // Коефіцієнти цільової функції двоїстої задачі = вільні члени прямої
+  const dualObjectiveCoeffs = primalData.resources.map((r) => r.available);
+  // Вільні члени двоїстої задачі = коефіцієнти цільової функції прямої
+  const dualRhs = primalData.prices;
+  // Матриця коефіцієнтів двоїстої задачі = транспонована матриця прямої
+  const dualConstraintsMatrix: number[][] = [];
+  for (let i = 0; i < primalData.productsCount; i++) {
+    const newRow: number[] = [];
+    for (let j = 0; j < primalData.resursCount; j++) {
+      newRow.push(primalData.resources[j].requirements[i]);
+    }
+    dualConstraintsMatrix.push(newRow);
+  }
+  // Знаки нерівностей двоїстої задачі (для стандартної задачі max <=, двоїста min >=)
+  const dualSign = ">=";
+  const dualNumVars = primalData.resursCount; // Кількість 'y' змінних
+  const dualNumConstraints = primalData.productsCount; // Кількість обмежень для 'y'
+
+  let dualTaskData: LPData = {
+    resursCount: dualNumConstraints,
+    productsCount: dualNumVars,
+    resources: dualConstraintsMatrix.map((row, i) => ({
+      requirements: row,
+      available: dualRhs[i],
+      sign: dualSign,
+    })),
+    prices: dualObjectiveCoeffs,
+  };
+
+  return dualTaskData;
+}
+function OutputDualTaskConditions(
+  dualTaskData: LPData,
+  dualObjectiveType: string
+) {
+  const dualSimplexEquationElement = document.getElementById(
+    "dualSimplexEquation"
+  )!;
+
+  let dualProblemHTML = "<h2>Formulated Dual Problem</h2>";
+  const dualObjectiveString = formatEquation(
+    dualTaskData.prices,
+    "y",
+    0,
+    ""
+  ).replace(" 0", "");
+  dualProblemHTML += `<p><b>Objective Function:</b> F* = ${dualObjectiveString} → ${dualObjectiveType}</p>`;
+  dualProblemHTML += "<p><b>Restrictions:</b></p><div>";
+  for (let i = 0; i < dualTaskData.resursCount; i++) {
+    dualProblemHTML += `<p>${formatEquation(
+      dualTaskData.resources[i].requirements,
+      "y",
+      dualTaskData.resources[i].available,
+      dualTaskData.resources[i].sign
+    )}</p>`;
+  }
+  dualProblemHTML += "</div><hr/>";
+  dualSimplexEquationElement.innerHTML = dualProblemHTML;
+}
+function TransformToCanonicalForm(dualTaskData: LPData): LPData {
+  const constraintsForSolver = dualTaskData.resources.map((row) => {
+    if (row.sign === ">=") {
+      return {
+        requirements: row.requirements.map((r) => -r),
+        available: -row.available,
+      };
+    }
+    return {
+      requirements: row,
+      available: row.available,
+    };
+  });
+
+  dualTaskData.resources = [...constraintsForSolver] as Resource[];
+
+  return dualTaskData;
+}
+function OutputSolution(finalTableData: SimplexTableData) {
   const solutionElement = document.getElementById("symplexSolution")!;
-  let solutionHTML = "<h2>Optimal Solution Found</h2>";
-  const solution = new Array(numVariables).fill(0);
-  for (let i = 0; i < xValues.length; i++) {
-    const varIndex = parseInt(xValues[i]) - 1;
-    if (varIndex < numVariables) {
-      solution[varIndex] = SimplexTable.RoundValueOutput(p0Values[i]);
+
+  const allVariablesSolution = new Array(finalTableData.cValues.length).fill(0);
+
+  for (let i = 0; i < finalTableData.xValues.length; i++) {
+    const varIndex = parseInt(finalTableData.xValues[i]) - 1;
+    allVariablesSolution[varIndex] = SimplexTable.RoundValueOutput(
+      finalTableData.p0Values[i]
+    );
+  }
+
+  const mainVarsSolution = allVariablesSolution.slice(
+    0,
+    finalTableData.cValues.length
+  );
+  const mainVarsString = mainVarsSolution.join(", ");
+  const finalValue = SimplexTable.RoundValueOutput(-finalTableData.qRow[0]);
+
+  const varsString = `(${allVariablesSolution.join(", ")})`;
+  let solutionHTML = `Y* = (${varsString})`;
+  solutionHTML += `<br>Optimal value <strong>F* = ${finalValue}</strong> is achieved at <strong>(y${
+    subscripts[1]
+  }...y${
+    subscripts[finalTableData.cValues.length]
+  }) = (${mainVarsString})</strong>`;
+
+  solutionElement.innerHTML = solutionHTML;
+}
+function convertDualToTableData(
+  data: LPData,
+  objectiveType: string
+): SimplexTableData {
+  const cValues = [...data.prices, ...new Array(data.resursCount).fill(0)];
+
+  const mainMatrix = data.resources.map((res) => {
+    const slackVars = new Array(data.resursCount).fill(0);
+    const slackIndex = data.resources.indexOf(res);
+    if (slackIndex !== -1) slackVars[slackIndex] = 1;
+    return [...res.requirements, ...slackVars];
+  });
+
+  const p0Values = data.resources.map((c) => c.available);
+  const cbValues = new Array(data.resursCount).fill(0);
+  const xValues = Array.from(
+    { length: data.resursCount },
+    (_, i) => `${data.productsCount + i + 1}`
+  );
+
+  const qRow = [0, ...new Array(data.productsCount + data.resursCount).fill(0)];
+  let qP0 = 0;
+  for (let i = 0; i < cbValues.length; i++) {
+    qP0 += cbValues[i] * p0Values[i];
+  }
+  qRow[0] = qP0;
+  for (let j = 0; j < cValues.length; j++) {
+    let sum = 0;
+    for (let i = 0; i < cbValues.length; i++) {
+      sum += cbValues[i] * mainMatrix[i][j];
+    }
+    qRow[j + 1] = cValues[j] - sum;
+  }
+
+  return { cValues, xValues, cbValues, p0Values, mainMatrix, qRow };
+}
+function outputDualTable(tableData: SimplexTableData, tableNum: number) {
+  const numRestrictions = tableData.mainMatrix.length;
+  const numTotalVars = tableData.mainMatrix[0].length;
+  const table = new SimplexTable(numRestrictions, numTotalVars, tableNum);
+  table.fillData(tableData, tableNum);
+}
+function formatEquation(
+    coeffs: number[],
+    vars: string,
+    rhs: number,
+    sign: string
+  ): string {
+    const terms = coeffs
+      .map((c, i) =>
+        c !== 0
+          ? `${c > 0 ? (i > 0 ? "+ " : "") : "- "}${Math.abs(c)}${vars}${
+              subscripts[i + 1]
+            }`
+          : ""
+      )
+      .filter(Boolean)
+      .join(" ");
+    return `${terms} ${sign.replace(">=", "≥").replace("<=", "≤")} ${rhs}`;
+  }
+
+function findDualPivotRow(tableData: SimplexTableData): number {
+  let minP0 = 0;
+  let pivotRowIndex = -1;
+  tableData.p0Values.forEach((p, i) => {
+    if (p < minP0) {
+      minP0 = p;
+      pivotRowIndex = i;
+    }
+  });
+  return pivotRowIndex;
+}
+function findDualPivotColumn(
+  tableData: SimplexTableData,
+  pivotRow: number
+): number {
+  let minRatio = Infinity;
+  let pivotColumnIndex = -1;
+  const row = tableData.mainMatrix[pivotRow];
+
+  for (let j = 0; j < row.length; j++) {
+    if (row[j] < 0) {
+      const ratio = Math.abs(tableData.qRow[j + 1] / row[j]);
+      if (ratio < minRatio) {
+        minRatio = ratio;
+        pivotColumnIndex = j;
+      }
+    }
+  }
+  return pivotColumnIndex;
+}
+function recalculateDualTable(
+  tableData: SimplexTableData,
+  pivotRow: number,
+  pivotColumn: number
+) {
+  const pivotElement = tableData.mainMatrix[pivotRow][pivotColumn];
+
+  tableData.xValues[pivotRow] = `${pivotColumn + 1}`;
+  tableData.cbValues[pivotRow] = tableData.cValues[pivotColumn];
+
+  const newPivotRowP0 = tableData.p0Values[pivotRow] / pivotElement;
+  const newPivotRow = tableData.mainMatrix[pivotRow].map(
+    (val) => val / pivotElement
+  );
+
+  for (let i = 0; i < tableData.mainMatrix.length; i++) {
+    if (i !== pivotRow) {
+      const factor = tableData.mainMatrix[i][pivotColumn];
+      tableData.p0Values[i] -= factor * newPivotRowP0;
+      for (let j = 0; j < tableData.mainMatrix[i].length; j++) {
+        tableData.mainMatrix[i][j] -= factor * newPivotRow[j];
+      }
     }
   }
 
-  solutionHTML += `<p>X* = (${solution.join(", ")})</p>`;
-  let finalValue = qRow[0];
-  if (initialData.objective === "min") {
-    finalValue = -finalValue; // Повертаємо знак, якщо шукали мінімум
+  tableData.mainMatrix[pivotRow] = newPivotRow;
+  tableData.p0Values[pivotRow] = newPivotRowP0;
+
+  const qFactor = tableData.qRow[pivotColumn + 1];
+  tableData.qRow[0] -= qFactor * newPivotRowP0;
+  for (let j = 0; j < tableData.mainMatrix[0].length; j++) {
+    tableData.qRow[j + 1] -= qFactor * newPivotRow[j];
   }
-  solutionHTML += `<p>F${initialData.objective === "min" ? "<sub>min</sub>" : "<sub>max</sub>"} = ${SimplexTable.RoundValueOutput(finalValue)}</p>`;
-  solutionElement.innerHTML = solutionHTML;
 }

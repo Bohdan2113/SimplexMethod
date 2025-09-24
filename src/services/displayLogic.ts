@@ -2,7 +2,6 @@ import {
   DataValidationResult,
   LPData,
   ValidationError,
-  ObjectiveType,
   RestrictionSign,
 } from "../types/data.js";
 import { subscripts } from "../types/table.js";
@@ -13,14 +12,10 @@ export class InteractiveTableManager {
   private dataService: DataService;
   private objectiveTypeSelect!: HTMLSelectElement;
   private currentData: LPData = {
-    resursCount: 2,
-    productsCount: 2,
-    resources: [
-      { requirements: [0, 0], available: 0, sign: "<=" },
-      { requirements: [0, 0], available: 0, sign: "<=" },
-    ],
-    prices: [0, 0],
-    objective: "max",
+    resursCount: 1,
+    productsCount: 1,
+    resources: Array.from({ length: 1 }, () => ({ requirements: Array.from({ length: 1 }, () => 0)  , available: 0, sign: "<=" })),
+    prices: Array.from({ length: 1 }, () => 0),
   };
 
   private loadButton!: HTMLButtonElement;
@@ -31,7 +26,6 @@ export class InteractiveTableManager {
   private objectiveFunctionContainer!: HTMLElement;
   private objectiveFunctionElement!: HTMLElement;
   private solveMethodSelect!: HTMLSelectElement;
-  private objectiveTypeContainer!: HTMLElement;
 
   constructor() {
     this.dataService = DataService.getInstance();
@@ -60,15 +54,9 @@ export class InteractiveTableManager {
     this.objectiveFunctionElement = document.getElementById(
       "objectiveFunction"
     ) as HTMLElement;
-    this.objectiveTypeSelect = document.getElementById(
-      "objectiveType"
-    ) as HTMLSelectElement;
     this.solveMethodSelect = document.getElementById(
       "solveMethod"
     ) as HTMLSelectElement;
-    this.objectiveTypeContainer = document.getElementById(
-      "objectiveTypeContainer"
-    ) as HTMLElement;
   }
 
   private setupEventListeners(): void {
@@ -79,13 +67,8 @@ export class InteractiveTableManager {
     this.numRestrictionsInput.addEventListener("input", () =>
       this.onRestrictionsCountChange()
     );
-    this.objectiveTypeSelect.addEventListener("change", () => {
-      this.currentData.objective = this.objectiveTypeSelect
-        .value as ObjectiveType;
-      this.updateObjectiveFunction();
-    });
     this.solveMethodSelect.addEventListener("change", () => {
-      this.onUpdateSolveMethod();
+      this.updateObjectiveFunction();
     });
   }
 
@@ -93,21 +76,11 @@ export class InteractiveTableManager {
     this.syncControlsWithData();
     this.renderForm(this.currentData);
     this.updateObjectiveFunction();
-    this.onUpdateSolveMethod();
   }
 
   private syncControlsWithData(): void {
     this.numVariablesInput.value = this.currentData.productsCount.toString();
     this.numRestrictionsInput.value = this.currentData.resursCount.toString();
-  }
-
-  private onUpdateSolveMethod(): void {
-    const selectedMethod = this.solveMethodSelect.value;
-    if (selectedMethod === "simplex") {
-      this.objectiveTypeContainer.style.display = "none";
-    } else if (selectedMethod === "dual-simplex") {
-      this.objectiveTypeContainer.style.display = "block";
-    }
   }
 
   private onVariablesCountChange(): void {
@@ -242,8 +215,7 @@ export class InteractiveTableManager {
         terms.push(`${price}x${subscripts[i + 1]}`);
       }
     });
-    const objectiveText =
-      this.currentData.objective === "max" ? "→ max" : "→ min";
+    const objectiveText = "→ max";
     this.objectiveFunctionElement.textContent =
       terms.length === 0
         ? `Q(...) = 0 ${objectiveText}`

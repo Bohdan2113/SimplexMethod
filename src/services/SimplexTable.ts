@@ -212,7 +212,7 @@ export class SimplexTable {
   }
 }
 
-export function ClearTableContainer(containerId: string): void {
+export function ClearContainer(containerId: string): void {
   const container = document.getElementById(containerId);
   if (container) {
     container.innerHTML = "";
