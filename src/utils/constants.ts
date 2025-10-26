@@ -1,4 +1,7 @@
-export const DATA_FILE_PATH = "../data/Bogdan.json";
+// export const DATA_FILE_PATH = "../data/Bogdan.json";
+// export const DATA_FILE_PATH = "../data/GomoryExample.json";
+export const DATA_FILE_PATH = "../data/Gomory_Bogdab.json";
+// export const DATA_FILE_PATH = "../data/Gomory_Test.json";
 // export const DATA_FILE_PATH = "../data/ExampleDual.json";
 // export const DATA_FILE_PATH = "../data/Bogdan_2.json";
 // export const DATA_FILE_PATH = '../data/Ivanna.json';

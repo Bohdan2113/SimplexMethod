@@ -3,6 +3,7 @@ import { ClearContainer } from "./SimplexTable.js";
 import { solveBySimplexMethod } from "./SimplexMethod.js";
 import { InteractiveTableManager } from "./displayLogic.js";
 import { solveByDualSimplexMethod } from "./DualSimplexMethod.js";
+import { solveByGomoryMethod } from "./GomoryMethod.js";
 
 const solveBtn = document.getElementById("solveBtn") as HTMLButtonElement;
 const solveMethodSelect = document.getElementById(
@@ -20,6 +21,8 @@ solveBtn.addEventListener("click", () => {
     solveBySimplexMethod();
   } else if (selectedMethod === "dual-simplex") {
     solveByDualSimplexMethod();
+  } else if (selectedMethod === "gomory") {
+    solveByGomoryMethod();
   }
 });
 
