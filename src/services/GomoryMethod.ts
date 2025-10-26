@@ -590,7 +590,7 @@ function outputGomoryHeader(data: GomoryData) {
   const gomoryEquationElement = document.getElementById("dualSimplexEquation")!;
 
   let headerHTML =
-    "<h2>Метод Гомори для розв'язання задачі цілочислового лінійного програмування</h2>";
+    "<h2>Метод Гоморі для розв'язання задачі цілочислового лінійного програмування</h2>";
   headerHTML += `<p><strong>Цілочислові змінні:</strong> ${data.integerVariableIndices
     .map((i) => `x${subscripts[i + 1]}`)
     .join(", ")}</p>`;
