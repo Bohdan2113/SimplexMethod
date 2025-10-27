@@ -211,7 +211,8 @@ function findMostFractionalIntegerVariable(
 }
 
 /**
- * Генерує відтинання Гомори за другим алгоритмом
+ * Генерує відтинання Гомори (перший алгоритм для цілком цілочислових задач)
+ * Використовуємо дробові частини коефіцієнтів для всіх змінних
  */
 function generateGomoryCut(
   tableData: SimplexTableData,
@@ -226,43 +227,15 @@ function generateGomoryCut(
     throw new Error("Спроба створити відтинання для цілого числа");
   }
 
-  const oneMinusBeta = 1 - beta_l;
-
-  // Перевіряємо ділення на нуль
-  if (Math.abs(oneMinusBeta) < EPSILON) {
-    throw new Error("Ділення на нуль при генерації відтинання Гомори");
-  }
-
-  const betaOverOneMinusBeta = beta_l / oneMinusBeta; // Розрахунок коефіцієнта β/(1-β)
-
   const a_lRow = tableData.mainMatrix[rowIndex];
-  const coefficients: number[] = new Array(tableData.cValues.length).fill(0);
+  const coefficients: number[] = [];
 
+  // Обчислюємо коефіцієнти для нового обмеження
+  // Використовуємо дробові частини: α_lj = {a_lj} = a_lj - [a_lj]
   for (let j = 0; j < a_lRow.length; j++) {
     const a_lj = a_lRow[j];
-    const varIndex = j; // Індекс в таблиці відповідає індексу змінної
-
-    let gamma_lj = 0;
-
-    if (varIndex < integerIndices.length && integerIndices.includes(varIndex)) {
-      // Цілочислова змінна
-      const alpha_lj = a_lj - Math.floor(a_lj); // Дробова частина {a_lj}
-
-      if (alpha_lj <= beta_l) {
-        gamma_lj = alpha_lj;
-      } else {
-        gamma_lj = betaOverOneMinusBeta * (1 - alpha_lj);
-      }
-    } else {
-      // Нецілочислова змінна (включаючи додаткові змінні)
-      if (a_lj >= 0) {
-        gamma_lj = a_lj;
-      } else {
-        gamma_lj = betaOverOneMinusBeta * Math.abs(a_lj);
-      }
-    }
-
-    coefficients[j] = -gamma_lj; // Знак мінус для формування обмеження вигляду ≤
+    const fractionalPart = a_lj - Math.floor(a_lj);
+    coefficients.push(-fractionalPart);
   }
 
   const slackVariableName = `x${subscripts[tableData.cValues.length]}`;
@@ -372,25 +345,21 @@ function outputCutInfo(cut: GomoryCut, variableName: string) {
     subscripts[parseInt(variableName)]
   }:</strong><br>`;
 
-  // Формуємо рівняння відтинання
+  // Формуємо рівняння відтинання (без slack змінної для виводу)
   const terms = cut.coefficients
     .map((coef, idx) => {
       if (Math.abs(coef) < EPSILON) return "";
       const sign = coef > 0 ? (idx === 0 ? "" : "+ ") : "- ";
       const absCoef = Math.abs(coef);
-      const varName =
-        idx < cut.coefficients.length - 1
-          ? `x${subscripts[idx + 1]}`
-          : cut.slackVariableName;
+      const varName = `x${subscripts[idx + 1]}`;
       return `${sign}${absCoef.toFixed(4)}${varName}`;
     })
-    .filter((term) => term !== "")
-    .join(" ");
+    .filter((term) => term !== "");
 
-  cutHTML += `${terms} ≤ ${cut.rhs.toFixed(4)}</div>`;
+  cutHTML += `${terms.join(" ")} ≤ ${cut.rhs.toFixed(4)}</div>`;
 
   cutDiv.innerHTML = cutHTML;
-  tablesContainer.appendChild(cutDiv);
+  //   tablesContainer.appendChild(cutDiv);
 }
 
 function displayGomoryResult(result: GomoryResult) {
